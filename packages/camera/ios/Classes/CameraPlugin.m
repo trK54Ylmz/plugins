@@ -99,7 +99,11 @@
   NSAssert(self, @"super init cannot be nil");
   _captureSession = [[AVCaptureSession alloc] init];
   AVCaptureSessionPreset preset;
-  if ([resolutionPreset isEqualToString:@"high"]) {
+  if ([resolutionPreset isEqualToString:@"ultra"]) {
+    preset = AVCaptureSessionPreset3840x2160;
+  } else if ([resolutionPreset isEqualToString:@"highest"]) {
+    preset = AVCaptureSessionPreset1920x1080;
+  } else if ([resolutionPreset isEqualToString:@"high"]) {
     preset = AVCaptureSessionPresetHigh;
   } else if ([resolutionPreset isEqualToString:@"medium"]) {
     preset = AVCaptureSessionPresetMedium;

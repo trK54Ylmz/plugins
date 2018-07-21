@@ -8,11 +8,15 @@ final MethodChannel _channel = const MethodChannel('plugins.flutter.io/camera')
 
 enum CameraLensDirection { front, back, external }
 
-enum ResolutionPreset { low, medium, high }
+enum ResolutionPreset { low, medium, high, highest, ultra }
 
 /// Returns the resolution preset as a String.
 String serializeResolutionPreset(ResolutionPreset resolutionPreset) {
   switch (resolutionPreset) {
+    case ResolutionPreset.ultra:
+      return 'ultra';
+    case ResolutionPreset.highest:
+      return 'highest';
     case ResolutionPreset.high:
       return 'high';
     case ResolutionPreset.medium:
