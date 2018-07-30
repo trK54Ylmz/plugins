@@ -10,6 +10,8 @@ enum CameraLensDirection { front, back, external }
 
 enum ResolutionPreset { low, medium, high, highest, ultra }
 
+enum SceneMode { day, night }
+
 /// Returns the resolution preset as a String.
 String serializeResolutionPreset(ResolutionPreset resolutionPreset) {
   switch (resolutionPreset) {
@@ -37,6 +39,17 @@ CameraLensDirection _parseCameraLensDirection(String string) {
       return CameraLensDirection.external;
   }
   throw new ArgumentError('Unknown CameraLensDirection value');
+}
+
+/// Returns the scene mode as a String.
+String serializeSceneMode(SceneMode sceneMode) {
+  switch(sceneMode) {
+    case SceneMode.day:
+      return 'day';
+    case SceneMode.night:
+      return 'night';
+  }
+  throw new ArgumentError('Unknown SceneMode value');
 }
 
 /// Completes with a list of available cameras.
@@ -114,6 +127,9 @@ class CameraValue {
   /// True when a picture capture request has been sent but as not yet returned.
   final bool isTakingPicture;
 
+  /// True when a scene mode set request has been sent but as not yet returned.
+  final bool isSettingMode;
+
   /// True when the camera is recording (not the same as previewing).
   final bool isRecordingVideo;
 
@@ -130,13 +146,15 @@ class CameraValue {
     this.previewSize,
     this.isRecordingVideo,
     this.isTakingPicture,
+    this.isSettingMode,
   });
 
   const CameraValue.uninitialized()
       : this(
             isInitialized: false,
             isRecordingVideo: false,
-            isTakingPicture: false);
+            isTakingPicture: false,
+            isSettingMode: false);
 
   /// Convenience getter for `previewSize.height / previewSize.width`.
   ///
@@ -149,6 +167,7 @@ class CameraValue {
     bool isInitialized,
     bool isRecordingVideo,
     bool isTakingPicture,
+    bool isSettingMode,
     String errorDescription,
     Size previewSize,
   }) {
@@ -158,14 +177,16 @@ class CameraValue {
       previewSize: previewSize ?? this.previewSize,
       isRecordingVideo: isRecordingVideo ?? this.isRecordingVideo,
       isTakingPicture: isTakingPicture ?? this.isTakingPicture,
+      isSettingMode: isSettingMode ?? this.isSettingMode,
     );
   }
 
   @override
   String toString() {
     return '$runtimeType('
+        'isTakingPicture: $isTakingPicture, '
         'isRecordingVideo: $isRecordingVideo, '
-        'isRecordingVideo: $isRecordingVideo, '
+        'isSettingMode: $isSettingMode, '
         'isInitialized: $isInitialized, '
         'errorDescription: $errorDescription, '
         'previewSize: $previewSize)';
@@ -242,6 +263,35 @@ class CameraController extends ValueNotifier<CameraValue> {
       case 'cameraClosing':
         value = value.copyWith(isRecordingVideo: false);
         break;
+    }
+  }
+
+  /// Set camera mode as "day" or "night"
+  ///
+  /// Throws a [CameraException] if the capture fails.
+  Future<Null> setMode(SceneMode mode) async {
+    if (!value.isInitialized || _isDisposed) {
+      throw new CameraException(
+        'Uninitialized CameraController.',
+        'setMode was called on uninitialized CameraController',
+      );
+    }
+    if (value.isSettingMode) {
+      throw new CameraException(
+        'Previous mode set has not returned yet.',
+        'setMode was called before the previous set returned.',
+      );
+    }
+    try {
+      value = value.copyWith(isSettingMode: true);
+      await _channel.invokeMethod(
+        'setMode',
+        <String, dynamic>{'mode': serializeSceneMode(mode)},
+      );
+      value = value.copyWith(isSettingMode: false);
+    } on PlatformException catch (e) {
+      value = value.copyWith(isSettingMode: false);
+      throw new CameraException(e.code, e.message);
     }
   }
 

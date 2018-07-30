@@ -73,6 +73,7 @@
 @property(readonly) CVPixelBufferRef volatile latestPixelBuffer;
 @property(readonly, nonatomic) CGSize previewSize;
 @property(readonly, nonatomic) CGSize captureSize;
+@property(readonly, nonatomic) CMTime duration;
 @property(strong, nonatomic) AVAssetWriter *videoWriter;
 @property(strong, nonatomic) AVAssetWriterInput *videoWriterInput;
 @property(strong, nonatomic) AVAssetWriterInput *audioWriterInput;
@@ -124,7 +125,7 @@
   CMVideoDimensions dimensions =
       CMVideoFormatDescriptionGetDimensions([[_captureDevice activeFormat] formatDescription]);
   _previewSize = CGSizeMake(dimensions.width, dimensions.height);
-
+  _duration = _captureDevice.exposureDuration;
   _captureVideoOutput = [AVCaptureVideoDataOutput new];
   _captureVideoOutput.videoSettings =
       @{(NSString *)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA) };
@@ -153,6 +154,46 @@
 
 - (void)stop {
   [_captureSession stopRunning];
+}
+
+- (void)setMode:(NSString *)mode result:(FlutterResult)result {
+  float isoRatio;
+  float diff;
+  if ([mode isEqualToString:@"night"]) {
+    isoRatio = 1;
+    diff = (CMTimeGetSeconds(_captureDevice.activeFormat.maxExposureDuration) - CMTimeGetSeconds(_duration)) * 0.14;
+  } else if ([mode isEqualToString:@"day"]) {
+    isoRatio = 0.8;
+    diff = 0;
+  } else {
+    _eventSink(@{
+      @"event" : @"error",
+      @"errorDescription" : @"Invalid camera mode"
+    });
+    return;
+  }
+  if([_captureDevice isExposureModeSupported:AVCaptureExposureModeCustom])
+  {
+    NSError *error;
+    if ([_captureDevice lockForConfiguration:&error]) {
+      [_captureDevice setExposureMode:AVCaptureExposureModeCustom];
+      CMTime duration = CMTimeMakeWithSeconds(CMTimeGetSeconds(_duration) + diff, _duration.timescale);
+      float isoVal = _captureDevice.activeFormat.maxISO * isoRatio;
+      [_captureDevice setExposureModeCustomWithDuration:duration ISO:isoVal completionHandler:nil];
+      [_captureDevice unlockForConfiguration];
+      result(nil);
+    } else {
+      _eventSink(@{
+        @"event" : @"error",
+        @"errorDescription" : [NSString stringWithFormat:@"%@", error]
+      });
+    }
+  } else {
+    _eventSink(@{
+      @"event" : @"error",
+      @"errorDescription" : @"Unable to modify camera mode"
+    });
+  }
 }
 
 - (void)captureToFile:(NSString *)path result:(FlutterResult)result {
@@ -510,6 +551,8 @@
       [_camera startVideoRecordingAtPath:call.arguments[@"filePath"] result:result];
     } else if ([@"stopVideoRecording" isEqualToString:call.method]) {
       [_camera stopVideoRecordingWithResult:result];
+    } else if ([@"setMode" isEqualToString:call.method]) {
+      [_camera setMode:call.arguments[@"mode"] result:result];
     } else {
       result(FlutterMethodNotImplemented);
     }
